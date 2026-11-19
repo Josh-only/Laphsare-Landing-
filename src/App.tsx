@@ -781,7 +781,7 @@ function Waitlist({ role, onRole, onPrivacy }: { role: Role; onRole: (role: Role
   const [message, setMessage] = useState('')
   const errorId = useId()
 
-  function onSubmit(event: FormEvent<HTMLFormElement>) {
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const value = email.trim().toLowerCase()
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
@@ -789,20 +789,43 @@ function Waitlist({ role, onRole, onPrivacy }: { role: Role; onRole: (role: Role
       setMessage('Enter a valid email address.')
       return
     }
-    const saved = readWaitlist()
-    if (saved.some((entry) => entry.email === value)) {
+
+    const formId = import.meta.env.VITE_FORMSPREE_FORM_ID?.trim()
+    if (!formId) {
       setStatus('error')
-      setMessage('This email is already on the waitlist in this browser.')
+      setMessage('Waitlist signups are not configured yet. Please try again later.')
       return
     }
+
     setStatus('pending')
     setMessage('')
-    window.setTimeout(() => {
-      saved.push({ email: value, role })
-      sessionStorage.setItem('lapshare-waitlist', JSON.stringify(saved))
+
+    try {
+      const response = await fetch(`https://formspree.io/f/${encodeURIComponent(formId)}`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: value,
+          role,
+          _subject: 'New Lapshare waitlist signup',
+        }),
+      })
+
+      if (!response.ok) {
+        setStatus('error')
+        setMessage('We could not submit your signup. Please try again in a moment.')
+        return
+      }
+
       setEmail('')
       setStatus('success')
-    }, 500)
+    } catch {
+      setStatus('error')
+      setMessage('Could not connect to the waitlist. Check your connection and try again.')
+    }
   }
 
   return (
@@ -826,7 +849,7 @@ function Waitlist({ role, onRole, onPrivacy }: { role: Role; onRole: (role: Role
             </span>
             <p className="text-xl font-black text-white">You are on the list.</p>
             <p className="mt-2 text-sm leading-6 text-white/60">
-              We saved your {role === 'agent' ? 'Agent' : 'Student'} interest in this browser. A launch note is all we will send — no spam, and we will not show your email here.
+              Your {role === 'agent' ? 'Agent' : 'Student'} signup has been submitted. We will email you when Lapshare is ready to launch.
             </p>
             <button type="button" onClick={() => setStatus('idle')} className="mt-6 text-sm font-semibold text-primary underline-offset-4 hover:underline">
               Add another email
@@ -880,7 +903,7 @@ function Waitlist({ role, onRole, onPrivacy }: { role: Role; onRole: (role: Role
               </p>
             ) : null}
             <p className="mt-4 text-xs text-white/30">
-              No spam. Just a launch notification when we go live. This preview stores your signup in this browser only.{' '}
+              No spam. Your email and selected role are sent through Formspree to manage the waitlist. See our{' '}
               <button type="button" onClick={onPrivacy} className="underline underline-offset-2 hover:text-white/60">
                 Privacy Policy
               </button>
@@ -903,16 +926,6 @@ function RoleToggle({ pressed, onClick, children }: { pressed: boolean; onClick:
       {children}
     </button>
   )
-}
-
-function readWaitlist(): { email: string; role: Role }[] {
-  try {
-    const raw = sessionStorage.getItem('lapshare-waitlist')
-    const parsed = raw ? JSON.parse(raw) : []
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
 }
 
 function CourseDialog({ course, onClose, onWaitlist }: { course: Course; onClose: () => void; onWaitlist: (role: Role) => void }) {
@@ -1141,9 +1154,10 @@ function Privacy() {
       <p className="mb-3 text-sm font-bold tracking-[0.16em] text-primary uppercase">Privacy</p>
       <h1 className="mb-6 text-4xl font-black tracking-[-0.03em]">Privacy Policy</h1>
       <div className="space-y-4 text-base leading-7 text-[var(--body)]">
-        <p>This is a pre-launch page. The waitlist and contact forms on this preview save what you type in your browser session only. They are not sent to a Lapshare server.</p>
+        <p>When you join the waitlist, this site sends your email address and selected role (Student or Agent) to Formspree on Lapshare's behalf so we can manage pre-launch interest and contact you about the launch. Formspree processes this information under its <a className="underline" href="https://formspree.io/legal/privacy-policy" target="_blank" rel="noreferrer">Privacy Policy</a>.</p>
+        <p>The contact form on this preview stores its contents in your browser session only; it is not sent to Lapshare. Do not submit sensitive information through either form.</p>
         <p>When the product launches, accounts are planned to use a university email and student ID so both Agents and Students can be verified before a booking. Payment details are planned to be handled by Paystack, not stored as raw card data by Lapshare.</p>
-        <p>We will publish a full policy before any real signup data is collected. Until then, do not submit information you would not want stored on this device.</p>
+        <p>This notice covers the pre-launch waitlist. We will update it before collecting information for product accounts.</p>
       </div>
     </>
   )
